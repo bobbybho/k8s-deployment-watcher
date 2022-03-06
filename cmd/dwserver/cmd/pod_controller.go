@@ -1,7 +1,11 @@
 package cmd
 
 import (
-	"github.com/bobbybho/k8s-deployment-watcher/common"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/bobbybho/k8s-deployment-watcher/controller"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
@@ -27,7 +31,7 @@ var podControllerWatchCmd = &cobra.Command{
 			err        error
 		)
 
-		if kubeConfig, err = common.ClientConfig(kubeConfigPath); err != nil {
+		if kubeConfig, err = rest.InClusterConfig(); err != nil {
 			panic(err.Error())
 		}
 
@@ -36,12 +40,28 @@ var podControllerWatchCmd = &cobra.Command{
 			panic(err.Error())
 		}
 
+		// register for signals
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGQUIT)
+		signal.Notify(sigs, syscall.SIGINT, syscall.SIGHUP)
+		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
 		pc := controller.NewPodController(clientset, namespace)
 
 		stop := make(chan struct{})
 		defer close(stop)
 		pc.Run(stop)
-		select {}
+
+	waitloop:
+		for {
+			select {
+			case sig := <-sigs:
+				log.Printf("Received a signal: %v\n", sig)
+				break waitloop
+			}
+		}
+		log.Println("Bye")
 	},
 }
 

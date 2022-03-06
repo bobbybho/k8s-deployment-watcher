@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dwserver
+  labels:
+    app: dwserver
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dwserver
+  template:
+    metadata:
+      labels:
+        app: dwserver
+    spec:
+      containers:
+      - name: dwserver
+        image: bobbyho/dwserver:0.1
+        command: ["dwserver", "pod-controller", "watch-endpoints"]

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bobbybho/k8s-deployment-watcher/common"
 	"github.com/google/go-cmp/cmp"
-	"gitlab.com/bobbyho10/k8s-deployment-watcher/common"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	corev1 "k8s.io/client-go/informers/core/v1"

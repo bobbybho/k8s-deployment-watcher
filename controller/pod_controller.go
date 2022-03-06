@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/bobbyho10/k8s-deployment-watcher/common"
-	"gitlab.com/bobbyho10/k8s-deployment-watcher/watcher"
+	"github.com/bobbybho/k8s-deployment-watcher/common"
+	"github.com/bobbybho/k8s-deployment-watcher/watcher"
 	v1 "k8s.io/api/core/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"

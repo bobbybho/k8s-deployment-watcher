@@ -2,14 +2,19 @@ package cmd
 
 import (
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/bobbybho/k8s-deployment-watcher/controller"
+	podserver "github.com/bobbybho/k8s-deployment-watcher/grpc/server/pod"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	pb "github.com/bobbybho/k8s-deployment-watcher/proto"
 )
 
 var podControllerCmd = &cobra.Command{
@@ -29,6 +34,7 @@ var podControllerWatchCmd = &cobra.Command{
 		var (
 			kubeConfig *rest.Config
 			err        error
+			errc       chan error
 		)
 
 		if kubeConfig, err = rest.InClusterConfig(); err != nil {
@@ -49,6 +55,22 @@ var podControllerWatchCmd = &cobra.Command{
 
 		pc := controller.NewPodController(clientset, namespace)
 
+		addr := "0.0.0.0:8088"
+
+		// TODO: the listening addr should be read from a config
+		lis, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		s := grpc.NewServer()
+		pb.RegisterPodStatIntfServer(s, &podserver.PodServer{PodController: pc})
+
+		go func() {
+			log.Printf("GRPC server is listening on %v", addr)
+			errc <- s.Serve(lis)
+		}()
+
 		stop := make(chan struct{})
 		defer close(stop)
 		pc.Run(stop)
@@ -58,6 +80,9 @@ var podControllerWatchCmd = &cobra.Command{
 			select {
 			case sig := <-sigs:
 				log.Printf("Received a signal: %v\n", sig)
+				break waitloop
+			case err := <-errc:
+				log.Printf("Received error from gRPC server: %v\n", err.Error())
 				break waitloop
 			}
 		}

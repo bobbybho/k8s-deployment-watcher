@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option go_package = "k8s-deployment-watcher/proto/podstat";
+
+package podstat;
+
+// PodStatIntf Service definition
+service PodStatIntf {
+    rpc GetPodStatusByName(PodStatRequest) returns (PodStatReply) {}
+    rpc GetAllPodStatus(PodStatRequest) returns (stream PodStatReply) {}
+    rpc ListenPodStatus(PodStatRequest) returns (stream PodStatReply) {}
+}
+
+message PodStat {
+    string podstate = 1;
+    string podip = 2;
+    string hostip = 3;
+    string az = 4;
+    string podname = 5;
+    string nodename = 6;
+}
+
+message PodStatReply {
+    string message = 1;
+    PodStat podstat = 2;
+}
+
+message PodStatRequest {
+    string clientid = 1;
+    string podname = 2;
+    string deployment = 3;
+    string namespace = 4;
+
+    enum State {
+        OPEN = 0;
+        CLOSE = 1;
+    }
+    State state = 5;
+}
+
+
+
+
+

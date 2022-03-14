@@ -46,4 +46,5 @@ func init() {
 	rootCmd.AddCommand(deploymentCmd)
 	rootCmd.AddCommand(podCmd)
 	rootCmd.AddCommand(podControllerCmd)
+	rootCmd.AddCommand(podBotCmd)
 }

@@ -9,5 +9,5 @@ dwserver:
 	@go install ./cmd/dwserver/...
 
 container:
-	docker build -f docker/Dockerfile -t bobbyho/dwserver:0.1 .
+	docker build -f docker/Dockerfile -t bobbyho/dwserver:0.2 .
 

@@ -1,0 +1,16 @@
+domain: demo.dw.io
+layout:
+- go.kubebuilder.io/v3
+projectName: dw-operator
+repo: demo.dw.io/operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: demo.dw.io
+  group: operator
+  kind: DwOperator
+  path: demo.dw.io/operator/api/v1
+  version: v1
+version: "3"

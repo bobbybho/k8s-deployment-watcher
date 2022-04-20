@@ -122,6 +122,30 @@ func buildDeployment(dwOPerator operatorv1.DwOperator) *apps.Deployment {
 									},
 								},
 							},
+							VolumeMounts: []core.VolumeMount{
+								{
+									Name:      "zone-info",
+									MountPath: "/etc/node-data",
+								},
+							},
+						},
+					},
+					Volumes: []apiv1.Volume{
+						{
+							Name: "zone-info",
+							VolumeSource: core.VolumeSource{
+								DownwardAPI: &core.DownwardAPIVolumeSource{
+									Items: []apiv1.DownwardAPIVolumeFile{
+										{
+											Path: "zone-info",
+											FieldRef: &core.ObjectFieldSelector{
+												APIVersion: "v1",
+												FieldPath:  "metadata.labels['availability-zone']",
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				},

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 
 	"demo.dw.io/operator/controllers/podstate"
+	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -16,20 +18,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// DwPodReconciler reconciles a DwPod object
-type DwPodReconciler struct {
+// DwRSReconciler reconciles a Replicaset for DW Replicaset
+type DwRSReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-func (r *DwPodReconciler) labelPodWithNodeAZ(ctx context.Context, pod *corev1.Pod) error {
+func (r *DwRSReconciler) labelPodWithNodeAZ(ctx context.Context, pod *corev1.Pod) error {
 	logger := log.FromContext(ctx)
 
-	logger.Info("Updating Pod AZ label", "namespace", pod.Namespace, "target_pod", pod.Name, "labels", pod.Labels)
+	logger.Info("Updating Pod AZ label in RS", "namespace", pod.Namespace, "target_pod", pod.Name, "labels", pod.Labels)
 
 	scheduled, nodeName := podstate.IsPodScheduled(pod)
 	if !scheduled {
@@ -38,6 +39,7 @@ func (r *DwPodReconciler) labelPodWithNodeAZ(ctx context.Context, pod *corev1.Po
 	}
 	node := &corev1.Node{}
 	if err := r.Get(context.Background(), types.NamespacedName{Name: nodeName}, node); err != nil {
+		logger.Error(err, "failed to get node info")
 		return err
 	}
 	// Get the current Pod labels.
@@ -45,6 +47,7 @@ func (r *DwPodReconciler) labelPodWithNodeAZ(ctx context.Context, pod *corev1.Po
 
 	zone, exists := podLabels["availability-zone"]
 	if exists && zone != "" {
+		logger.Info("availability_zone is already set", "namespace", pod.Namespace, "target_pod", pod.Name, "labels", pod.Labels)
 		return nil
 	}
 
@@ -67,7 +70,7 @@ func (r *DwPodReconciler) labelPodWithNodeAZ(ctx context.Context, pod *corev1.Po
 	return nil
 }
 
-func (r *DwPodReconciler) reconcileDwPodLabel(ctx context.Context, pods *corev1.PodList) error {
+func (r *DwRSReconciler) reconcileDwPodLabel(ctx context.Context, pods *corev1.PodList) error {
 	logger := log.FromContext(ctx)
 
 	var err error
@@ -80,22 +83,20 @@ func (r *DwPodReconciler) reconcileDwPodLabel(ctx context.Context, pods *corev1.
 	return nil
 }
 
-func (r *DwPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DwRSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	logger.Info("Fetching Pod Resource")
-	/*
-		pod := corev1.Pod{}
-		if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
-			logger.Error(err, "failed to get pod resource")
-			// Ignore NotFound errors as they will be retried automatically if the
-			// resource is created in future.
-			if !apierrors.IsNotFound(err) {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, client.IgnoreNotFound(err)
+	logger.Info("Fetching Replica Resource")
+	rs := appv1.ReplicaSet{}
+	if err := r.Get(ctx, req.NamespacedName, &rs); err != nil {
+		logger.Error(err, "failed to get replicaset resource")
+		// Ignore NotFound errors as they will be retried automatically if the
+		// resource is created in future.
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
 		}
-	*/
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
 	// kubernetes uses level trigger so we want to reconcile all the targed Pod events in a single reoncile loop
 	pods := &corev1.PodList{}
@@ -107,6 +108,7 @@ func (r *DwPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	if err := r.List(ctx, pods, listOps...); err != nil {
+		logger.Error(err, "failed to list pods")
 		return ctrl.Result{}, err
 	}
 
@@ -119,16 +121,15 @@ func (r *DwPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 // SetupWithManager sets up the controller with the Manager.
 /*
-func (r *DwPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *DwRSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		For(&appv1.ReplicaSet{}).
 		Complete(r)
 }
 */
 
-func (r *DwPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Create a new Controller
-	c, err := controller.New("dwpod-controller", mgr, controller.Options{Reconciler: r})
+func (r *DwRSReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	c, err := controller.New("dwrscontroller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -149,19 +150,10 @@ func (r *DwPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		},
 	}
 
-	// Watch for Pod events, and enqueue a reconcile.Request for namespace
+	// Watch for Pod events, and enqueue a reconcile.Request for the ReplicaSet in the OwnerReferences
 	err = c.Watch(
-		&source.Kind{Type: &corev1.Pod{}},
-		handler.EnqueueRequestsFromMapFunc(func(object client.Object) []reconcile.Request {
-			return []reconcile.Request{
-				{
-					NamespacedName: types.NamespacedName{
-						Namespace: object.GetNamespace(),
-					},
-				},
-			}
-		}),
-		p)
+		&source.Kind{Type: &appv1.ReplicaSet{}},
+		&handler.EnqueueRequestForObject{}, p)
 	if err != nil {
 		return err
 	}

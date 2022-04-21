@@ -1,0 +1,9 @@
+apiVersion: operator.demo.dw.io/v1
+kind: DwOperator
+metadata:
+  name: dwoperator-sample-test1
+  namespace: test1
+spec:
+  name: dw-sample-test1
+  namespace: test1
+  replicas: 2
